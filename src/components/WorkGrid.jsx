@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { useAuthStore, useDataStore, useUIStore } from '../store'
 import { useFilteredProjects, useDebounce } from '../hooks'
 
@@ -6,7 +6,6 @@ function catLabel(c) {
   return c.charAt(0).toUpperCase() + c.slice(1)
 }
 
-/* ── WorkCard ─────────────────────────────────────────────────── */
 function WorkCard({ project, isAdmin, onDelete, onDragStart, onDrop, onClick }) {
   const [dragOver, setDragOver] = useState(false)
 
@@ -27,15 +26,7 @@ function WorkCard({ project, isAdmin, onDelete, onDragStart, onDrop, onClick }) 
       {isAdmin && (
         <>
           <button className="w-drag vis">☰</button>
-          <button
-            className="w-del vis"
-            onClick={e => {
-              e.stopPropagation()
-              onDelete(project)
-            }}
-          >
-            ✕
-          </button>
+          <button className="w-del vis" onClick={e => { e.stopPropagation(); onDelete(project) }}>✕</button>
         </>
       )}
 
@@ -43,8 +34,8 @@ function WorkCard({ project, isAdmin, onDelete, onDragStart, onDrop, onClick }) 
         {project.media_url ? (
           project.media_type === 'video' ? (
             <video
-              key={project.media_url}
-              src={`${project.media_url}?t=${Date.now()}`}
+              key={project.id}
+              src={project.media_url}
               muted
               loop
               playsInline
@@ -52,8 +43,8 @@ function WorkCard({ project, isAdmin, onDelete, onDragStart, onDrop, onClick }) 
             />
           ) : (
             <img
-              key={project.media_url}
-              src={`${project.media_url}?t=${Date.now()}`}
+              key={project.id}
+              src={project.media_url}
               alt={project.title}
               loading="eager"
             />
@@ -78,12 +69,13 @@ function WorkCard({ project, isAdmin, onDelete, onDragStart, onDrop, onClick }) 
   )
 }
 
-/* ── WorkGrid ─────────────────────────────────────────────────── */
 export function WorkGrid({ onToast }) {
   const isAdmin = useAuthStore(s => s.isAdmin)
   const { deleteProject, reorderProjects } = useDataStore()
+  const projects = useDataStore(s => s.projects)
   const openModal = useUIStore(s => s.openModal)
-  const filtered = useFilteredProjects()
+
+  const filtered = useFilteredProjects(projects)
 
   const [lightbox, setLightbox] = useState({ open: false, project: null })
   const [dragFrom, setDragFrom] = useState(null)
@@ -98,22 +90,19 @@ export function WorkGrid({ onToast }) {
     }
   }, 400)
 
-  const handleDrop = useCallback(
-    (toId) => {
-      if (!dragFrom || dragFrom === toId) return
-      const ids = filtered.map(p => p.id)
-      const from = ids.indexOf(dragFrom)
-      const to = ids.indexOf(toId)
+  const handleDrop = useCallback((toId) => {
+    if (!dragFrom || dragFrom === toId) return
+    const ids = filtered.map(p => p.id)
+    const from = ids.indexOf(dragFrom)
+    const to = ids.indexOf(toId)
 
-      const reordered = [...ids]
-      reordered.splice(from, 1)
-      reordered.splice(to, 0, dragFrom)
+    const reordered = [...ids]
+    reordered.splice(from, 1)
+    reordered.splice(to, 0, dragFrom)
 
-      setDragFrom(null)
-      debouncedReorder(reordered)
-    },
-    [dragFrom, filtered, debouncedReorder]
-  )
+    setDragFrom(null)
+    debouncedReorder(reordered)
+  }, [dragFrom, filtered, debouncedReorder])
 
   const confirmDelete = useCallback(async () => {
     if (!confirm) return
@@ -130,14 +119,6 @@ export function WorkGrid({ onToast }) {
   return (
     <>
       <div className="wgrid">
-        {!filtered.length && !isAdmin && (
-          <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '64px 24px', color: 'var(--ts)' }}>
-            <div style={{ fontSize: 48, marginBottom: 16 }}>🎨</div>
-            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Belum ada karya</div>
-            <div style={{ fontSize: 13, opacity: 0.6 }}>Karya akan muncul di sini setelah ditambahkan.</div>
-          </div>
-        )}
-
         {filtered.map(p => (
           <WorkCard
             key={p.id}
@@ -168,13 +149,13 @@ export function WorkGrid({ onToast }) {
 
       {confirm && (
         <div className="mov open" onClick={e => { if (e.target === e.currentTarget) setConfirm(null) }}>
-          <div className="mb" style={{ maxWidth: 360, textAlign: 'center' }}>
+          <div className="mb">
             <div className="ci">🗑️</div>
             <div className="ct">Hapus karya ini?</div>
             <div className="cm">"{confirm.title}" akan dihapus permanen.</div>
             <div className="cr">
-              <button className="btn-c" onClick={() => setConfirm(null)}>Batal</button>
-              <button className="btn-d" onClick={confirmDelete}>Ya, Hapus</button>
+              <button onClick={() => setConfirm(null)}>Batal</button>
+              <button onClick={confirmDelete}>Hapus</button>
             </div>
           </div>
         </div>
@@ -183,65 +164,31 @@ export function WorkGrid({ onToast }) {
   )
 }
 
-/* ── Lightbox ─────────────────────────────────────────────────── */
 function Lightbox({ project, all, onClose }) {
   const [idx, setIdx] = useState(() => all.findIndex(p => p.id === project.id))
 
-  const handleKey = useCallback(
-    e => {
-      if (e.key === 'Escape') onClose()
-      if (e.key === 'ArrowLeft') setIdx(i => (i - 1 + all.length) % all.length)
-      if (e.key === 'ArrowRight') setIdx(i => (i + 1) % all.length)
-    },
-    [all.length, onClose]
-  )
+  const handleKey = useCallback(e => {
+    if (e.key === 'Escape') onClose()
+    if (e.key === 'ArrowLeft') setIdx(i => (i - 1 + all.length) % all.length)
+    if (e.key === 'ArrowRight') setIdx(i => (i + 1) % all.length)
+  }, [all.length, onClose])
 
-  const ref = useRef()
-  ref.current = handleKey
-
-  useState(() => {
-    const fn = e => ref.current(e)
-    window.addEventListener('keydown', fn)
-    return () => window.removeEventListener('keydown', fn)
-  })
+  useEffect(() => {
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [handleKey])
 
   const p = all[idx]
 
   return (
     <div className="lb open" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <button className="lb-btn lb-x" onClick={onClose}>✕</button>
-      <button className="lb-btn lb-p" onClick={() => setIdx(i => (i - 1 + all.length) % all.length)}>‹</button>
-      <button className="lb-btn lb-n" onClick={() => setIdx(i => (i + 1) % all.length)}>›</button>
+      <button onClick={onClose}>✕</button>
 
-      <div className="lb-in">
-        {p.media_url ? (
-          p.media_type === 'video' ? (
-            <video
-              key={p.media_url}
-              src={`${p.media_url}?t=${Date.now()}`}
-              controls
-              autoPlay
-              playsInline
-            />
-          ) : (
-            <img
-              key={p.media_url}
-              src={`${p.media_url}?t=${Date.now()}`}
-              alt={p.title}
-            />
-          )
-        ) : (
-          <div style={{ fontSize: 80 }}>{p.emoji || '🎨'}</div>
-        )}
-
-        <div className="lb-cap">
-          <div className="lb-cap-t">{p.title}</div>
-          <div className="lb-cap-s">
-            {catLabel(p.category)}
-            {p.description ? ` · ${p.description}` : ''}
-          </div>
-        </div>
-      </div>
+      {p.media_type === 'video' ? (
+        <video src={p.media_url} controls autoPlay />
+      ) : (
+        <img src={p.media_url} alt={p.title} />
+      )}
     </div>
   )
 }
