@@ -1,12 +1,9 @@
-// src/components/WorkGrid.jsx
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { useAuthStore, useDataStore, useUIStore } from '../store'
 import { useFilteredProjects, useDebounce } from '../hooks'
 
-function esc(s) { return String(s).replace(/</g, '&lt;').replace(/>/g, '&gt;') }
 function catLabel(c) { return c.charAt(0).toUpperCase() + c.slice(1) }
 
-/* ── WorkCard ─────────────────────────────────────────────────── */
 function WorkCard({ project, isAdmin, onDelete, onDragStart, onDrop, onClick }) {
   const [dragOver, setDragOver] = useState(false)
 
@@ -28,18 +25,33 @@ function WorkCard({ project, isAdmin, onDelete, onDragStart, onDrop, onClick }) 
         <button className="w-drag vis">☰</button>
         <button className="w-del vis" onClick={e => { e.stopPropagation(); onDelete(project) }}>✕</button>
       </>}
+
       <div className="wm">
         {project.media_url
           ? (project.media_type === 'video'
-              ? <video src={project.media_url} muted loop playsInline preload="metadata" />
-              : <img src={project.media_url} alt={project.title} loading="lazy" />)
+              ? <video
+                  key={project.id}
+                  src={project.media_url}
+                  muted
+                  loop
+                  playsInline
+                  preload="auto"
+                />
+              : <img
+                  key={project.id}
+                  src={project.media_url}
+                  alt={project.title}
+                  loading="eager"
+                />)
           : <div className="wph">{project.emoji || '🎨'}</div>
         }
+
         <div className="wov"><div>
           <div className="wov-t">{project.title}</div>
           <div className="wov-c">{catLabel(project.category)}</div>
         </div></div>
       </div>
+
       <div className="wmeta">
         <div className="wmt">{project.title}</div>
         <span className="wmb">{catLabel(project.category)}</span>
@@ -48,18 +60,16 @@ function WorkCard({ project, isAdmin, onDelete, onDragStart, onDrop, onClick }) 
   )
 }
 
-/* ── WorkGrid ─────────────────────────────────────────────────── */
 export function WorkGrid({ onToast }) {
-  const isAdmin         = useAuthStore(s => s.isAdmin)
+  const isAdmin = useAuthStore(s => s.isAdmin)
   const { deleteProject, reorderProjects } = useDataStore()
-  const openModal       = useUIStore(s => s.openModal)
-  const filtered        = useFilteredProjects()
+  const openModal = useUIStore(s => s.openModal)
+  const filtered = useFilteredProjects()
 
-  const [lightbox,  setLightbox]  = useState({ open: false, project: null })
-  const [dragFrom,  setDragFrom]  = useState(null)
-  const [confirm,   setConfirm]   = useState(null)
+  const [lightbox, setLightbox] = useState({ open: false, project: null })
+  const [dragFrom, setDragFrom] = useState(null)
+  const [confirm, setConfirm] = useState(null)
 
-  // Debounce persist: rapid drags = 1 DB call after 400ms idle
   const debouncedReorder = useDebounce(async (orderedIds) => {
     try {
       await reorderProjects(orderedIds)
@@ -73,7 +83,7 @@ export function WorkGrid({ onToast }) {
     if (!dragFrom || dragFrom === toId) return
     const ids = filtered.map(p => p.id)
     const from = ids.indexOf(dragFrom)
-    const to   = ids.indexOf(toId)
+    const to = ids.indexOf(toId)
     const reordered = [...ids]
     reordered.splice(from, 1)
     reordered.splice(to, 0, dragFrom)
@@ -124,7 +134,6 @@ export function WorkGrid({ onToast }) {
         )}
       </div>
 
-      {/* Lightbox */}
       {lightbox.open && (
         <Lightbox
           project={lightbox.project}
@@ -133,7 +142,6 @@ export function WorkGrid({ onToast }) {
         />
       )}
 
-      {/* Confirm delete */}
       {confirm && (
         <div className="mov open" onClick={e => { if (e.target === e.currentTarget) setConfirm(null) }}>
           <div className="mb" style={{ maxWidth:360, textAlign:'center' }}>
@@ -151,10 +159,9 @@ export function WorkGrid({ onToast }) {
   )
 }
 
-/* ── WorkFilters ──────────────────────────────────────────────── */
 export function WorkFilters() {
   const activeFilter = useUIStore(s => s.activeFilter)
-  const setFilter    = useUIStore(s => s.setFilter)
+  const setFilter = useUIStore(s => s.setFilter)
   return (
     <div className="filters rv">
       {['all','design','photo','video'].map(f => (
@@ -170,40 +177,37 @@ export function WorkFilters() {
   )
 }
 
-/* ── Lightbox ─────────────────────────────────────────────────── */
 function Lightbox({ project, all, onClose }) {
   const [idx, setIdx] = useState(() => all.findIndex(p => p.id === project.id))
 
-  // Keyboard navigation
   const handleKey = useCallback(e => {
-    if (e.key === 'Escape')      { onClose(); return }
-    if (e.key === 'ArrowLeft')   setIdx(i => (i - 1 + all.length) % all.length)
-    if (e.key === 'ArrowRight')  setIdx(i => (i + 1) % all.length)
+    if (e.key === 'Escape') onClose()
+    if (e.key === 'ArrowLeft') setIdx(i => (i - 1 + all.length) % all.length)
+    if (e.key === 'ArrowRight') setIdx(i => (i + 1) % all.length)
   }, [all.length, onClose])
 
-  // Attach/detach on mount
-  const ref = useRef()
-  ref.current = handleKey
-  useState(() => {
-    const fn = e => ref.current(e)
-    window.addEventListener('keydown', fn)
-    return () => window.removeEventListener('keydown', fn)
-  })
+  useEffect(() => {
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [handleKey])
 
   const p = all[idx]
+
   return (
     <div className="lb open" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <button className="lb-btn lb-x" onClick={onClose}>✕</button>
       <button className="lb-btn lb-p" onClick={() => setIdx(i => (i - 1 + all.length) % all.length)}>‹</button>
       <button className="lb-btn lb-n" onClick={() => setIdx(i => (i + 1) % all.length)}>›</button>
       <div className="lb-ctr">{idx + 1} / {all.length}</div>
+
       <div className="lb-in">
         {p.media_url
           ? (p.media_type === 'video'
-              ? <video src={p.media_url} controls autoPlay playsInline />
-              : <img src={p.media_url} alt={p.title} />)
+              ? <video key={p.id} src={p.media_url} controls autoPlay playsInline />
+              : <img key={p.id} src={p.media_url} alt={p.title} />)
           : <div style={{ width:'clamp(260px,60vw,460px)', height:300, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(255,255,255,.05)', borderRadius:20, fontSize:80 }}>{p.emoji||'🎨'}</div>
         }
+
         <div className="lb-cap">
           <div className="lb-cap-t">{p.title}</div>
           <div className="lb-cap-s">{catLabel(p.category)}{p.description ? ` · ${p.description}` : ''}</div>
