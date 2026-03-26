@@ -1,3 +1,4 @@
+// src/components/WorkGrid.jsx
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useAuthStore, useDataStore, useUIStore } from '../store'
 import { useFilteredProjects, useDebounce } from '../hooks'
@@ -29,27 +30,21 @@ function WorkCard({ project, isAdmin, onDelete, onDragStart, onDrop, onClick }) 
       <div className="wm">
         {project.media_url
           ? (project.media_type === 'video'
-              ? <video
-                  key={project.id}
-                  src={project.media_url}
-                  muted
-                  loop
-                  playsInline
-                  preload="auto"
-                />
+              ? <video src={`${project.media_url}?t=${project.updated_at || Date.now()}`} muted loop playsInline preload="metadata" />
               : <img
-                  key={project.id}
-                  src={project.media_url}
+                  src={`${project.media_url}?t=${project.updated_at || Date.now()}`}
                   alt={project.title}
                   loading="eager"
                 />)
           : <div className="wph">{project.emoji || '🎨'}</div>
         }
 
-        <div className="wov"><div>
-          <div className="wov-t">{project.title}</div>
-          <div className="wov-c">{catLabel(project.category)}</div>
-        </div></div>
+        <div className="wov">
+          <div>
+            <div className="wov-t">{project.title}</div>
+            <div className="wov-c">{catLabel(project.category)}</div>
+          </div>
+        </div>
       </div>
 
       <div className="wmeta">
@@ -73,7 +68,7 @@ export function WorkGrid({ onToast }) {
   const debouncedReorder = useDebounce(async (orderedIds) => {
     try {
       await reorderProjects(orderedIds)
-      onToast?.('Urutan disimpan!', 'ok', '↕️')
+      onToast?.('Urutan disimpan!', 'ok')
     } catch (e) {
       onToast?.(e.message, 'err')
     }
@@ -95,7 +90,7 @@ export function WorkGrid({ onToast }) {
     if (!confirm) return
     try {
       await deleteProject(confirm.id)
-      onToast?.('Karya dihapus.', '', '🗑️')
+      onToast?.('Karya dihapus.')
     } catch (e) {
       onToast?.(e.message, 'err')
     } finally {
@@ -162,6 +157,7 @@ export function WorkGrid({ onToast }) {
 export function WorkFilters() {
   const activeFilter = useUIStore(s => s.activeFilter)
   const setFilter = useUIStore(s => s.setFilter)
+
   return (
     <div className="filters rv">
       {['all','design','photo','video'].map(f => (
@@ -186,10 +182,14 @@ function Lightbox({ project, all, onClose }) {
     if (e.key === 'ArrowRight') setIdx(i => (i + 1) % all.length)
   }, [all.length, onClose])
 
+  const ref = useRef()
+  ref.current = handleKey
+
   useEffect(() => {
-    window.addEventListener('keydown', handleKey)
-    return () => window.removeEventListener('keydown', handleKey)
-  }, [handleKey])
+    const fn = e => ref.current(e)
+    window.addEventListener('keydown', fn)
+    return () => window.removeEventListener('keydown', fn)
+  }, [])
 
   const p = all[idx]
 
@@ -203,14 +203,16 @@ function Lightbox({ project, all, onClose }) {
       <div className="lb-in">
         {p.media_url
           ? (p.media_type === 'video'
-              ? <video key={p.id} src={p.media_url} controls autoPlay playsInline />
-              : <img key={p.id} src={p.media_url} alt={p.title} />)
-          : <div style={{ width:'clamp(260px,60vw,460px)', height:300, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(255,255,255,.05)', borderRadius:20, fontSize:80 }}>{p.emoji||'🎨'}</div>
+              ? <video src={`${p.media_url}?t=${p.updated_at || Date.now()}`} controls autoPlay playsInline />
+              : <img src={`${p.media_url}?t=${p.updated_at || Date.now()}`} alt={p.title} />)
+          : <div style={{ width:'clamp(260px,60vw,460px)', height:300, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(255,255,255,.05)', borderRadius:20, fontSize:80 }}>{p.emoji || '🎨'}</div>
         }
 
         <div className="lb-cap">
           <div className="lb-cap-t">{p.title}</div>
-          <div className="lb-cap-s">{catLabel(p.category)}{p.description ? ` · ${p.description}` : ''}</div>
+          <div className="lb-cap-s">
+            {catLabel(p.category)}{p.description ? ` · ${p.description}` : ''}
+          </div>
         </div>
       </div>
     </div>
